@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Manager — Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⬡</div>
+        <div class="brand-text">
+          <span class="brand-name">3D</span>
+          <span class="brand-sub">MANAGER</span>
+        </div>
+      </div>
+
+      <ul class="nav-list">
+        <li class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">◈</span>
+          <span>Dashboard</span>
+        </li>
+        <li class="nav-item" data-page="modelli">
+          <span class="nav-icon">◻</span>
+          <span>Modelli</span>
+        </li>
+        <li class="nav-item" data-page="spese">
+          <span class="nav-icon">↓</span>
+          <span>Spese</span>
+        </li>
+        <li class="nav-item" data-page="guadagni">
+          <span class="nav-icon">↑</span>
+          <span>Guadagni</span>
+        </li>
+        <li class="nav-item" data-page="configurazione">
+          <span class="nav-icon">⚙</span>
+          <span>Configurazione</span>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="status-dot"></div>
+        <span>Neon DB</span>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <div id="page-container"></div>
+    </main>
+  </div>
+
+  <!-- Modal overlay -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-box">
+      <button id="modal-close">✕</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
