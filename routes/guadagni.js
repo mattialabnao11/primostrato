@@ -4,10 +4,44 @@ const { pool } = require('../db');
 
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM guadagni ORDER BY data DESC, created_at DESC'
-    );
+    // Porta con sé anche il vendita_id se esiste, per sapere se aprire il dettaglio
+    const { rows } = await pool.query(`
+      SELECT g.*, v.id as vendita_id
+      FROM guadagni g
+      LEFT JOIN vendite v ON v.guadagno_id = g.id
+      ORDER BY g.data DESC, g.created_at DESC
+    `);
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET singolo guadagno con dettaglio vendita completo
+router.get('/:id', async (req, res) => {
+  try {
+    const { rows: gRows } = await pool.query(
+      'SELECT * FROM guadagni WHERE id=$1', [req.params.id]
+    );
+    if (!gRows.length) return res.status(404).json({ error: 'Non trovato' });
+    const g = gRows[0];
+
+    // Cerca vendita collegata
+    const { rows: vRows } = await pool.query(
+      'SELECT * FROM vendite WHERE guadagno_id=$1', [g.id]
+    );
+    g.vendita = vRows[0] || null;
+
+    // Se c'è una vendita, carica anche il modello collegato
+    if (g.vendita && g.vendita.modello_id) {
+      const { rows: mRows } = await pool.query(
+        'SELECT id, nome, link_modello, link_immagini, costo_totale, tempo_ore FROM modelli WHERE id=$1',
+        [g.vendita.modello_id]
+      );
+      g.vendita.modello = mRows[0] || null;
+    }
+
+    res.json(g);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

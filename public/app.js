@@ -300,19 +300,24 @@ async function guadagni() {
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Data</th><th>Descrizione</th><th>Categoria</th><th>Importo</th><th>Note</th><th></th></tr>
+            <tr><th>Data</th><th>Descrizione</th><th>Categoria</th><th>Profitto Netto</th><th></th></tr>
           </thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td class="mono" style="color:var(--text3)">${fmtDate(r.data)}</td>
-                <td>${r.descrizione}</td>
+                <td>
+                  ${r.descrizione}
+                  ${r.vendita_id ? `<span class="badge badge-orange" style="margin-left:8px">Vendita 3D</span>` : ''}
+                </td>
                 <td>${r.categoria ? `<span class="badge badge-green">${r.categoria}</span>` : '—'}</td>
                 <td class="mono" style="color:var(--green);font-weight:700">${fmt(r.importo)}</td>
-                <td style="color:var(--text3);font-size:12px">${r.note || '—'}</td>
                 <td>
                   <div style="display:flex;gap:6px">
-                    <button class="btn btn-ghost btn-sm" onclick="openGuadagniForm(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏</button>
+                    ${r.vendita_id
+                      ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="openGuadagnoDetail(${r.id})">🔍 Dettaglio</button>`
+                      : `<button class="btn btn-ghost btn-sm" onclick="openGuadagniForm(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏</button>`
+                    }
                     <button class="btn btn-danger btn-sm" onclick="deleteRow('guadagni', ${r.id}, guadagni)">🗑</button>
                   </div>
                 </td>
@@ -326,6 +331,136 @@ async function guadagni() {
     `;
   } catch (e) {
     $('page-container').innerHTML = `<div class="empty-state">❌ ${e.message}</div>`;
+  }
+}
+
+async function openGuadagnoDetail(guadagnoId) {
+  openModal(`<div class="loading"><div class="spin"></div> Caricamento dettaglio…</div>`);
+  try {
+    const g = await api(`/guadagni/${guadagnoId}`);
+    const v = g.vendita;
+    const m = v?.modello;
+
+    const imgs = m?.link_immagini
+      ? (Array.isArray(m.link_immagini) ? m.link_immagini : JSON.parse(m.link_immagini || '[]'))
+      : [];
+    const firstThumb = imgs.length > 0 ? driveThumbUrl(imgs[0]) : null;
+
+    const extraUsati = v?.extra_usati
+      ? (Array.isArray(v.extra_usati) ? v.extra_usati : JSON.parse(v.extra_usati || '[]'))
+      : [];
+
+    const costoExtraUnit = extraUsati.reduce((s, ex) => s + parseFloat(ex.prezzo_per_pezzo), 0);
+    const costoUnitTot = parseFloat(v.costo_produzione_unit) + costoExtraUnit;
+    const qty = parseInt(v.quantita);
+    const costoTotale = costoUnitTot * qty;
+    const prezzoVendita = parseFloat(v.prezzo_vendita);
+    const profittoNetto = parseFloat(g.importo);
+
+    $('modal-content').innerHTML = `
+      <div class="modal-title">🔍 Dettaglio <span>Vendita</span></div>
+
+      <!-- Intestazione modello -->
+      <div style="display:grid;grid-template-columns:${firstThumb ? '100px 1fr' : '1fr'};gap:16px;align-items:start;margin-bottom:24px;padding:16px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius)">
+        ${firstThumb ? `
+        <a href="${driveViewUrl(imgs[0])}" target="_blank">
+          <div style="width:100px;height:100px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)">
+            <img src="${firstThumb}" style="width:100%;height:100%;object-fit:cover"
+              onerror="this.parentElement.innerHTML='<div style=\\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text3)\\'>◻</div>'">
+          </div>
+        </a>` : ''}
+        <div>
+          <div style="font-size:18px;font-weight:800;margin-bottom:6px">${v.modello_nome}</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px">
+            <span>📅 ${fmtDate(v.data)}</span>
+            <span>📦 Quantità: <strong style="color:var(--text)">${qty} pz</strong></span>
+            ${m?.tempo_ore ? `<span>⏱ Tempo stampa: <strong style="color:var(--text)">${parseFloat(m.tempo_ore).toFixed(1)}h</strong></span>` : ''}
+          </div>
+          ${m?.link_modello ? `
+          <a href="${driveViewUrl(m.link_modello)}" target="_blank"
+             style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--accent);font-family:var(--mono);text-decoration:none">
+            ◻ Apri file 3D su Drive →
+          </a>` : ''}
+        </div>
+      </div>
+
+      <!-- Breakdown costi -->
+      <div class="section-title">Breakdown Economico</div>
+      <div class="vendita-breakdown" style="margin-top:8px">
+        <div class="breakdown-row">
+          <span>Costo produzione unitario</span>
+          <span style="color:var(--text2);font-family:var(--mono)">${fmt(v.costo_produzione_unit)}</span>
+        </div>
+
+        ${extraUsati.length > 0 ? `
+          <div class="breakdown-row" style="color:var(--text3);font-size:11px;margin-top:2px">
+            <span>SPESE EXTRA INCLUSE</span>
+            <span></span>
+          </div>
+          ${extraUsati.map(ex => `
+            <div class="breakdown-row" style="padding-left:12px">
+              <span style="color:var(--text2)">＋ ${ex.nome}</span>
+              <span style="color:var(--text2);font-family:var(--mono)">${fmt(ex.prezzo_per_pezzo)}/pz</span>
+            </div>
+          `).join('')}
+          <div class="breakdown-row">
+            <span>Totale extra unitario</span>
+            <span style="color:var(--text2);font-family:var(--mono)">${fmt(costoExtraUnit)}</span>
+          </div>
+        ` : `
+          <div class="breakdown-row" style="color:var(--text3)">
+            <span>Nessuna spesa extra inclusa</span>
+            <span>—</span>
+          </div>
+        `}
+
+        <div class="breakdown-row total">
+          <span>Costo totale/pz (prod + extra)</span>
+          <span style="font-family:var(--mono)">${fmt(costoUnitTot)}</span>
+        </div>
+        <div class="breakdown-row total">
+          <span>Costo totale × ${qty} pz</span>
+          <span style="color:var(--red);font-family:var(--mono)">${fmt(costoTotale)}</span>
+        </div>
+
+        <div style="height:1px;background:var(--border2);margin:4px 0"></div>
+
+        <div class="breakdown-row total">
+          <span>Prezzo di vendita incassato</span>
+          <span style="font-family:var(--mono)">${fmt(prezzoVendita)}</span>
+        </div>
+        <div class="breakdown-row netto ${profittoNetto < 0 ? 'negative' : ''}">
+          <span>PROFITTO NETTO</span>
+          <span>${fmt(profittoNetto)}</span>
+        </div>
+      </div>
+
+      ${imgs.length > 1 ? `
+        <div class="section-title" style="margin-top:20px">Immagini Modello</div>
+        <div class="drive-preview-grid" style="margin-top:8px">
+          ${imgs.map(link => {
+            const thumb = driveThumbUrl(link);
+            const view  = driveViewUrl(link);
+            return thumb ? `
+              <a href="${view}" target="_blank" class="drive-preview-item">
+                <img src="${thumb}" onerror="this.parentElement.innerHTML='<div class=\\'img-fallback\\'><span>🖼</span></div>'">
+              </a>` : '';
+          }).join('')}
+        </div>
+      ` : ''}
+
+      ${v.note ? `
+        <div style="margin-top:16px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;color:var(--text2)">
+          📝 <strong>Note:</strong> ${v.note}
+        </div>
+      ` : ''}
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Chiudi</button>
+      </div>
+    `;
+  } catch(e) {
+    $('modal-content').innerHTML = `<div style="color:var(--red)">❌ Errore: ${e.message}</div>`;
   }
 }
 
