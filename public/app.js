@@ -413,8 +413,6 @@ function modelCard(m) {
     : (typeof m.link_immagini === 'string' ? JSON.parse(m.link_immagini || '[]') : []);
 
   const thumb = imgs.length > 0 ? driveThumbUrl(imgs[0]) : null;
-  const costoMat = (m.materiali || []).reduce((s, mat) =>
-    s + parseFloat(mat.grammi) * parseFloat(mat.prezzo_per_grammo), 0);
 
   return `
     <div class="model-card">
@@ -429,12 +427,14 @@ function modelCard(m) {
         <div class="model-card-meta">
           <span>⏱ ${parseFloat(m.tempo_ore).toFixed(1)}h stampa</span>
           <span>◈ ${(m.materiali || []).length} materiale/i</span>
+          ${(m.extra || []).length > 0 ? `<span>＋ ${m.extra.length} spesa/e extra</span>` : ''}
           ${imgs.length > 0 ? `<span>🖼 ${imgs.length} immagine/i</span>` : ''}
         </div>
         <div class="model-card-cost">${fmt(m.costo_totale)}</div>
       </div>
       <div class="model-card-actions">
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="event.stopPropagation();openModelForm(${m.id})">✏ Modifica</button>
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="event.stopPropagation();openVenditaModal(${m.id})">💰 Vendi</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openModelForm(${m.id})">✏</button>
         <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteRow('modelli', ${m.id}, modelli)">🗑</button>
       </div>
     </div>
@@ -527,9 +527,10 @@ async function showModelDetail(id) {
 }
 
 /* ─── MODEL FORM ─────────────────────────────────────────────────────── */
-// Track image links and material rows in form
+// Track image links and material rows and extra in form
 let formImgLinks = [];
 let formMatRows = [];
+let formExtraRows = [];
 
 async function openModelForm(id = null) {
   let m = null;
@@ -541,6 +542,7 @@ async function openModelForm(id = null) {
     ? (Array.isArray(m.link_immagini) ? m.link_immagini : JSON.parse(m.link_immagini || '[]'))
     : [];
   formMatRows = m?.materiali?.map(mat => ({ materiale_id: mat.materiale_id, grammi: mat.grammi })) || [];
+  formExtraRows = m?.extra?.map(ex => ({ nome: ex.nome, prezzo_per_pezzo: ex.prezzo_per_pezzo })) || [];
 
   const matOptions = state.materiali.map(mat =>
     `<option value="${mat.id}">${mat.nome}${mat.colore ? ' – ' + mat.colore : ''} (${fmt(mat.prezzo_per_grammo)}/g)</option>`
@@ -580,7 +582,15 @@ async function openModelForm(id = null) {
 
     <div id="cost-preview" class="cost-summary" style="margin-top:16px"></div>
 
-    <div class="section-title" style="margin-top:20px">Immagini (link Google Drive)</div>
+    <div class="section-title" style="margin-top:24px">Spese Extra (opzionali)
+      <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:8px">es. imballaggio, vernice, supporti…</span>
+    </div>
+    <div id="extra-rows" class="material-rows" style="margin-bottom:10px">
+      ${formExtraRows.map((row, i) => extraRowHTML(i, row)).join('')}
+    </div>
+    <button class="add-material-btn" onclick="addExtraRow()">+ Aggiungi Spesa Extra</button>
+
+    <div class="section-title" style="margin-top:24px">Immagini (link Google Drive)</div>
     <div id="img-links-list" class="img-links-section">
       ${formImgLinks.map((link, i) => imgLinkRow(i, link)).join('')}
     </div>
@@ -618,6 +628,48 @@ function matRowHTML(i, row, matOptions, existingMaterials) {
       </div>
       <button class="btn btn-danger btn-sm" onclick="removeMatRow(${i})">✕</button>
     </div>`;
+}
+
+function extraRowHTML(i, row = {}) {
+  return `
+    <div class="material-row" id="extra-row-${i}">
+      <input type="text" id="extra-nome-${i}" placeholder="es. Imballaggio, Vernice, Supporti…"
+        value="${row.nome || ''}" style="flex:1">
+      <div style="display:flex;align-items:center;gap:6px;min-width:120px">
+        <span style="color:var(--text3);font-size:12px;white-space:nowrap">€</span>
+        <input type="number" step="0.01" placeholder="0.00" id="extra-prezzo-${i}"
+          value="${row.prezzo_per_pezzo || ''}" style="width:100%">
+        <span style="color:var(--text3);font-size:10px;white-space:nowrap">/pz</span>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removeExtraRow(${i})">✕</button>
+    </div>`;
+}
+
+let extraRowCount = 0;
+function addExtraRow() {
+  extraRowCount++;
+  const i = extraRowCount + 200;
+  const el = document.createElement('div');
+  el.innerHTML = extraRowHTML(i);
+  $('extra-rows').appendChild(el.firstElementChild);
+}
+
+function removeExtraRow(i) {
+  const el = $(`extra-row-${i}`);
+  if (el) el.remove();
+}
+
+function getExtraRows() {
+  const rows = [];
+  document.querySelectorAll('[id^="extra-row-"]').forEach(row => {
+    const i = row.id.replace('extra-row-', '');
+    const nome = $(`extra-nome-${i}`);
+    const prezzo = $(`extra-prezzo-${i}`);
+    if (nome && prezzo && nome.value.trim() && prezzo.value) {
+      rows.push({ nome: nome.value.trim(), prezzo_per_pezzo: parseFloat(prezzo.value) });
+    }
+  });
+  return rows;
 }
 
 function addMatRow(matOptions) {
@@ -730,7 +782,8 @@ async function saveModel(id) {
     link_modello: $('f-modello')?.value || null,
     link_immagini: getImgLinks(),
     note: $('f-note')?.value || null,
-    materiali: getMatRows()
+    materiali: getMatRows(),
+    extra: getExtraRows()
   };
 
   try {
@@ -894,6 +947,165 @@ async function saveMaterial(id) {
     closeModal();
     toast('Materiale salvato ✓');
     configurazione();
+  } catch (e) { toast('Errore: ' + e.message, 'error'); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VENDITA MODAL
+   ═══════════════════════════════════════════════════════════════════════ */
+async function openVenditaModal(id) {
+  const [m, cfg] = await Promise.all([
+    api(`/modelli/${id}`),
+    api('/configurazione')
+  ]);
+  const margine = parseFloat(cfg.find(c => c.chiave === 'margine_minimo')?.valore || 30);
+  const costoProd = parseFloat(m.costo_totale);
+  const extra = m.extra || [];
+
+  openModal(`
+    <div class="modal-title">💰 Vendi <span>${m.nome}</span></div>
+
+    <div class="form-grid" style="margin-bottom:20px">
+      <div class="form-group">
+        <label>Data Vendita</label>
+        <input type="date" id="v-data" value="${todayISO()}">
+      </div>
+      <div class="form-group">
+        <label>Quantità</label>
+        <input type="number" min="1" step="1" id="v-qty" value="1" oninput="updateVenditaCalc(${costoProd}, ${margine})">
+      </div>
+      <div class="form-group">
+        <label>Note vendita</label>
+        <input type="text" id="v-note" placeholder="es. Cliente Mario, Etsy…">
+      </div>
+    </div>
+
+    ${extra.length > 0 ? `
+      <div class="section-title">Spese Extra — seleziona quelle incluse in questa vendita</div>
+      <div class="extra-checkbox-list" id="v-extra-list">
+        ${extra.map(ex => `
+          <label class="extra-checkbox-item" id="v-extra-item-${ex.id}"
+            onclick="this.classList.toggle('checked');updateVenditaCalc(${costoProd}, ${margine})">
+            <input type="checkbox" id="v-ex-${ex.id}" value="${ex.prezzo_per_pezzo}"
+              onclick="event.stopPropagation();this.closest('.extra-checkbox-item').classList.toggle('checked');updateVenditaCalc(${costoProd}, ${margine})">
+            <span class="extra-nome">${ex.nome}</span>
+            <span class="extra-prezzo">${fmt(ex.prezzo_per_pezzo)}/pz</span>
+          </label>
+        `).join('')}
+      </div>
+    ` : `<div style="color:var(--text3);font-size:12px;font-family:var(--mono);margin-bottom:16px">Nessuna spesa extra configurata per questo modello.</div>`}
+
+    <div id="v-prezzo-cons" class="price-consigliato">
+      <span>Prezzo consigliato (margine ${margine}%)</span>
+      <strong id="v-cons-val">—</strong>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Prezzo di Vendita Fatto (€) *</label>
+      <input type="number" step="0.01" id="v-prezzo" placeholder="0.00"
+        oninput="updateVenditaCalc(${costoProd}, ${margine})"
+        style="font-size:18px;font-weight:700;font-family:var(--mono)">
+    </div>
+
+    <div id="v-breakdown" class="vendita-breakdown"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="saveVendita(${m.id}, '${m.nome.replace(/'/g,"\\'")}', ${costoProd})">
+        ✓ Registra Vendita
+      </button>
+    </div>
+  `);
+
+  updateVenditaCalc(costoProd, margine);
+}
+
+function getExtraSelezionati() {
+  const selected = [];
+  document.querySelectorAll('[id^="v-ex-"]').forEach(cb => {
+    if (cb.checked) {
+      const id = cb.id.replace('v-ex-', '');
+      const label = cb.closest('.extra-checkbox-item');
+      const nome = label.querySelector('.extra-nome').textContent;
+      selected.push({ id: parseInt(id), nome, prezzo_per_pezzo: parseFloat(cb.value) });
+    }
+  });
+  return selected;
+}
+
+function updateVenditaCalc(costoProd, margine) {
+  const qty = parseInt($('v-qty')?.value || 1);
+  const prezzoFatto = parseFloat($('v-prezzo')?.value || 0);
+  const extraSel = getExtraSelezionati();
+  const costoExtraUnit = extraSel.reduce((s, ex) => s + ex.prezzo_per_pezzo, 0);
+  const costoUnitTot = costoProd + costoExtraUnit;
+  const costoTotale = costoUnitTot * qty;
+  const prezzoConsigliato = costoTotale * (1 + margine / 100);
+  const netto = prezzoFatto - costoTotale;
+
+  // Aggiorna prezzo consigliato
+  const consEl = $('v-cons-val');
+  if (consEl) consEl.textContent = fmt(prezzoConsigliato);
+
+  // Aggiorna breakdown
+  const bd = $('v-breakdown');
+  if (!bd) return;
+
+  if (prezzoFatto === 0) {
+    bd.innerHTML = `<div style="color:var(--text3);font-size:12px;font-family:var(--mono);text-align:center">Inserisci il prezzo di vendita per vedere il riepilogo</div>`;
+    return;
+  }
+
+  const nettoClass = netto >= 0 ? '' : 'negative';
+  bd.innerHTML = `
+    <div class="breakdown-row">
+      <span>Costo produzione × ${qty}</span>
+      <span style="color:var(--red)">${fmt(costoProd * qty)}</span>
+    </div>
+    ${extraSel.map(ex => `
+      <div class="breakdown-row">
+        <span>${ex.nome} × ${qty}</span>
+        <span style="color:var(--red)">${fmt(ex.prezzo_per_pezzo * qty)}</span>
+      </div>
+    `).join('')}
+    <div class="breakdown-row total">
+      <span>Totale costi</span>
+      <span style="color:var(--red)">${fmt(costoTotale)}</span>
+    </div>
+    <div class="breakdown-row total">
+      <span>Prezzo di vendita</span>
+      <span>${fmt(prezzoFatto)}</span>
+    </div>
+    <div class="breakdown-row netto ${nettoClass}" style="margin-top:4px">
+      <span style="font-size:14px">PROFITTO NETTO</span>
+      <span style="font-size:20px">${fmt(netto)}</span>
+    </div>
+  `;
+}
+
+async function saveVendita(modelloId, modelloNome, costoProdUnit) {
+  const qty = parseInt($('v-qty')?.value || 1);
+  const prezzoVendita = parseFloat($('v-prezzo')?.value || 0);
+  if (!prezzoVendita || prezzoVendita <= 0) return toast('Inserisci il prezzo di vendita', 'error');
+
+  const extraUsati = getExtraSelezionati();
+  const body = {
+    modello_id: modelloId,
+    modello_nome: modelloNome,
+    quantita: qty,
+    prezzo_vendita: prezzoVendita,
+    costo_produzione_unit: costoProdUnit,
+    extra_usati: extraUsati,
+    note: $('v-note')?.value || null,
+    data: $('v-data')?.value || todayISO()
+  };
+
+  try {
+    const result = await api('/vendite', 'POST', body);
+    closeModal();
+    const netto = result.guadagno.importo;
+    toast(`Vendita registrata! Profitto netto: ${fmt(netto)} ✓`);
+    modelli();
   } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 

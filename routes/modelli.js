@@ -2,24 +2,34 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 
-// GET all models with their materials
+// Helper: carica materiali ed extra per un modello
+async function loadRelated(pool, modelloId) {
+  const [{ rows: mat }, { rows: extra }] = await Promise.all([
+    pool.query(`
+      SELECT mm.*, mat.nome, mat.colore, mat.prezzo_per_grammo
+      FROM modello_materiali mm
+      JOIN materiali mat ON mm.materiale_id = mat.id
+      WHERE mm.modello_id = $1
+    `, [modelloId]),
+    pool.query(
+      'SELECT * FROM modello_extra WHERE modello_id = $1 ORDER BY id ASC',
+      [modelloId]
+    )
+  ]);
+  return { mat, extra };
+}
+
+// GET all models with their materials and extra
 router.get('/', async (req, res) => {
   try {
     const { rows: modelli } = await pool.query(
       'SELECT * FROM modelli ORDER BY created_at DESC'
     );
-
-    // Per ogni modello, carica i materiali usati
     for (const m of modelli) {
-      const { rows: mat } = await pool.query(`
-        SELECT mm.*, mat.nome, mat.colore, mat.prezzo_per_grammo
-        FROM modello_materiali mm
-        JOIN materiali mat ON mm.materiale_id = mat.id
-        WHERE mm.modello_id = $1
-      `, [m.id]);
+      const { mat, extra } = await loadRelated(pool, m.id);
       m.materiali = mat;
+      m.extra = extra;
     }
-
     res.json(modelli);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -31,37 +41,29 @@ router.get('/:id', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM modelli WHERE id=$1', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Non trovato' });
-
     const modello = rows[0];
-    const { rows: mat } = await pool.query(`
-      SELECT mm.*, mat.nome, mat.colore, mat.prezzo_per_grammo
-      FROM modello_materiali mm
-      JOIN materiali mat ON mm.materiale_id = mat.id
-      WHERE mm.modello_id = $1
-    `, [modello.id]);
+    const { mat, extra } = await loadRelated(pool, modello.id);
     modello.materiali = mat;
-
+    modello.extra = extra;
     res.json(modello);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST create model with materials and auto-calculate cost
+// POST create model with materials, extra and auto-calculate cost
 router.post('/', async (req, res) => {
-  const { nome, tempo_ore, link_modello, link_immagini, note, materiali } = req.body;
+  const { nome, tempo_ore, link_modello, link_immagini, note, materiali, extra } = req.body;
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // Recupera costo ora luce
     const { rows: cfg } = await client.query(
       "SELECT valore FROM configurazione WHERE chiave = 'costo_ora_luce'"
     );
     const costoOraLuce = parseFloat(cfg[0]?.valore || 0.25);
 
-    // Calcola costo materiali
     let costoMateriali = 0;
     if (materiali && materiali.length > 0) {
       for (const mat of materiali) {
@@ -74,11 +76,9 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Calcola costo energia
     const costoEnergia = parseFloat(tempo_ore || 0) * costoOraLuce;
     const costoTotale = costoMateriali + costoEnergia;
 
-    // Inserisci modello
     const { rows } = await client.query(
       `INSERT INTO modelli (nome, tempo_ore, link_modello, link_immagini, note, costo_totale)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -87,7 +87,6 @@ router.post('/', async (req, res) => {
     );
     const modello = rows[0];
 
-    // Inserisci materiali usati
     if (materiali && materiali.length > 0) {
       for (const mat of materiali) {
         await client.query(
@@ -97,16 +96,20 @@ router.post('/', async (req, res) => {
       }
     }
 
+    if (extra && extra.length > 0) {
+      for (const ex of extra) {
+        await client.query(
+          'INSERT INTO modello_extra (modello_id, nome, prezzo_per_pezzo) VALUES ($1,$2,$3)',
+          [modello.id, ex.nome, ex.prezzo_per_pezzo]
+        );
+      }
+    }
+
     await client.query('COMMIT');
 
-    // Ricarica con materiali
-    const { rows: matRows } = await pool.query(`
-      SELECT mm.*, mat.nome, mat.colore, mat.prezzo_per_grammo
-      FROM modello_materiali mm
-      JOIN materiali mat ON mm.materiale_id = mat.id
-      WHERE mm.modello_id = $1
-    `, [modello.id]);
+    const { mat: matRows, extra: extraRows } = await loadRelated(pool, modello.id);
     modello.materiali = matRows;
+    modello.extra = extraRows;
 
     res.status(201).json(modello);
   } catch (err) {
@@ -119,19 +122,17 @@ router.post('/', async (req, res) => {
 
 // PUT update model
 router.put('/:id', async (req, res) => {
-  const { nome, tempo_ore, link_modello, link_immagini, note, materiali } = req.body;
+  const { nome, tempo_ore, link_modello, link_immagini, note, materiali, extra } = req.body;
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // Recupera costo ora luce
     const { rows: cfg } = await client.query(
       "SELECT valore FROM configurazione WHERE chiave = 'costo_ora_luce'"
     );
     const costoOraLuce = parseFloat(cfg[0]?.valore || 0.25);
 
-    // Calcola costo materiali
     let costoMateriali = 0;
     if (materiali && materiali.length > 0) {
       for (const mat of materiali) {
@@ -147,7 +148,6 @@ router.put('/:id', async (req, res) => {
     const costoEnergia = parseFloat(tempo_ore || 0) * costoOraLuce;
     const costoTotale = costoMateriali + costoEnergia;
 
-    // Update modello
     const { rows } = await client.query(
       `UPDATE modelli SET nome=$1, tempo_ore=$2, link_modello=$3, link_immagini=$4, note=$5, costo_totale=$6
        WHERE id=$7 RETURNING *`,
@@ -159,7 +159,6 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Non trovato' });
     }
 
-    // Elimina vecchi materiali e reinserisci
     await client.query('DELETE FROM modello_materiali WHERE modello_id=$1', [req.params.id]);
     if (materiali && materiali.length > 0) {
       for (const mat of materiali) {
@@ -170,16 +169,22 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    await client.query('DELETE FROM modello_extra WHERE modello_id=$1', [req.params.id]);
+    if (extra && extra.length > 0) {
+      for (const ex of extra) {
+        await client.query(
+          'INSERT INTO modello_extra (modello_id, nome, prezzo_per_pezzo) VALUES ($1,$2,$3)',
+          [req.params.id, ex.nome, ex.prezzo_per_pezzo]
+        );
+      }
+    }
+
     await client.query('COMMIT');
 
     const modello = rows[0];
-    const { rows: matRows } = await pool.query(`
-      SELECT mm.*, mat.nome, mat.colore, mat.prezzo_per_grammo
-      FROM modello_materiali mm
-      JOIN materiali mat ON mm.materiale_id = mat.id
-      WHERE mm.modello_id = $1
-    `, [modello.id]);
+    const { mat: matRows, extra: extraRows } = await loadRelated(pool, modello.id);
     modello.materiali = matRows;
+    modello.extra = extraRows;
 
     res.json(modello);
   } catch (err) {

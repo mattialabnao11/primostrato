@@ -18,6 +18,7 @@ app.use('/api/modelli', require('./routes/modelli'));
 app.use('/api/materiali', require('./routes/materiali'));
 app.use('/api/configurazione', require('./routes/configurazione'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/vendite', require('./routes/vendite'));
 
 // SPA fallback
 app.get('*', (req, res) => {

@@ -63,6 +63,30 @@ const initDB = async () => {
         materiale_id INTEGER REFERENCES materiali(id) ON DELETE SET NULL,
         grammi DECIMAL(8,2) NOT NULL DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS modello_extra (
+        id SERIAL PRIMARY KEY,
+        modello_id INTEGER REFERENCES modelli(id) ON DELETE CASCADE,
+        nome VARCHAR(200) NOT NULL,
+        prezzo_per_pezzo DECIMAL(10,4) NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS vendite (
+        id SERIAL PRIMARY KEY,
+        modello_id INTEGER REFERENCES modelli(id) ON DELETE SET NULL,
+        modello_nome VARCHAR(200),
+        quantita INTEGER NOT NULL DEFAULT 1,
+        prezzo_vendita DECIMAL(10,2) NOT NULL,
+        costo_produzione_unit DECIMAL(10,2) NOT NULL,
+        costo_extra_unit DECIMAL(10,2) NOT NULL DEFAULT 0,
+        costo_totale DECIMAL(10,2) NOT NULL,
+        profitto_netto DECIMAL(10,2) NOT NULL,
+        extra_usati JSONB DEFAULT '[]',
+        note TEXT,
+        data DATE NOT NULL,
+        guadagno_id INTEGER REFERENCES guadagni(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
 
     // Inserisci configurazioni di default se non esistono
