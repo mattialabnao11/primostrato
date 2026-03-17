@@ -5,12 +5,41 @@ const state = {
   config: {}
 };
 
+/* ─── AUTH ─────────────────────────────────────────────────────────────── */
+function getToken() { return localStorage.getItem('3dm_token'); }
+function getUser()  { return localStorage.getItem('3dm_user') || ''; }
+
+function doLogout() {
+  localStorage.removeItem('3dm_token');
+  localStorage.removeItem('3dm_user');
+  window.location.href = '/login.html';
+}
+
+// Redirect a login se non autenticato
+(function checkAuth() {
+  if (!getToken()) {
+    window.location.href = '/login.html';
+  }
+})();
+
 /* ─── UTILS ────────────────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
+
 const api = async (path, method = 'GET', body = null) => {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + getToken()
+    }
+  };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch('/api' + path, opts);
+  if (r.status === 401) {
+    // Token scaduto o invalido → torna al login
+    doLogout();
+    throw new Error('Sessione scaduta');
+  }
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 };
@@ -1019,6 +1048,34 @@ async function configurazione() {
         💡 Calcolo grammi per bobina: se paghi € 25 per una bobina da 1000g → prezzo al grammo = 0.0250 €/g<br>
         I costi vengono ricalcolati automaticamente ogni volta che salvi un modello.
       </div>
+
+      <!-- Sicurezza -->
+      <div class="page-header" style="margin-top:36px;margin-bottom:16px">
+        <div class="section-title" style="margin:0">Sicurezza Account</div>
+      </div>
+      <div class="card" style="padding:0;margin-bottom:0">
+        <div class="config-row" style="grid-template-columns:1fr;gap:16px">
+          <div>
+            <div class="config-key">Cambia Password</div>
+            <div class="config-desc">Sei loggato come: <strong style="color:var(--text)">${getUser()}</strong></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end">
+            <div>
+              <label style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Password Attuale</label>
+              <input type="password" id="pwd-current" placeholder="••••••••">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Nuova Password</label>
+              <input type="password" id="pwd-new" placeholder="min. 8 caratteri">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Conferma</label>
+              <input type="password" id="pwd-confirm" placeholder="ripeti">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="changePassword()">Cambia</button>
+          </div>
+        </div>
+      </div>
     `;
   } catch (e) {
     $('page-container').innerHTML = `<div class="empty-state">❌ ${e.message}</div>`;
@@ -1244,6 +1301,28 @@ async function saveVendita(modelloId, modelloNome, costoProdUnit) {
   } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 
+async function changePassword() {
+  const current = $('pwd-current')?.value;
+  const newPwd   = $('pwd-new')?.value;
+  const confirm  = $('pwd-confirm')?.value;
+  if (!current || !newPwd || !confirm) return toast('Compila tutti i campi password', 'error');
+  if (newPwd.length < 8)              return toast('Nuova password minimo 8 caratteri', 'error');
+  if (newPwd !== confirm)             return toast('Le password non coincidono', 'error');
+  try {
+    await api('/auth/change-password', 'POST', {
+      current_password: current,
+      new_password: newPwd
+    });
+    toast('Password cambiata con successo ✓');
+    $('pwd-current').value = '';
+    $('pwd-new').value = '';
+    $('pwd-confirm').value = '';
+  } catch(e) {
+    const msg = e.message.includes('{') ? JSON.parse(e.message).error : e.message;
+    toast(msg || 'Errore cambio password', 'error');
+  }
+}
+
 /* ─── GENERIC DELETE ─────────────────────────────────────────────────── */
 async function deleteRow(endpoint, id, reloadFn) {
   if (!confirm('Eliminare questo elemento?')) return;
@@ -1266,6 +1345,10 @@ function emptyState(icon, text, sub) {
 
 /* ─── INIT ───────────────────────────────────────────────────────────── */
 (async () => {
+  // Mostra username nella sidebar
+  const userEl = $('sidebar-user');
+  if (userEl) userEl.textContent = getUser() || 'Neon DB';
+
   try {
     const cfg = await api('/configurazione');
     cfg.forEach(c => { state.config[c.chiave] = c.valore; });

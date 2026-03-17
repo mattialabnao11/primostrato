@@ -14,10 +14,9 @@
     <!-- Sidebar -->
     <nav id="sidebar">
       <div class="brand">
-        <div class="brand-icon">⬡</div>
+        <img src="logo.png" alt="Logo" class="brand-logo">
         <div class="brand-text">
-          <span class="brand-name">3D</span>
-          <span class="brand-sub">MANAGER</span>
+          <span class="brand-sub">3D MANAGER</span>
         </div>
       </div>
 
@@ -46,7 +45,8 @@
 
       <div class="sidebar-footer">
         <div class="status-dot"></div>
-        <span>Neon DB</span>
+        <span id="sidebar-user">Neon DB</span>
+        <button onclick="doLogout()" title="Esci" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 4px;transition:color .15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">⏻</button>
       </div>
     </nav>
 

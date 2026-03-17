@@ -9,6 +9,13 @@ const initDB = async () => {
   const client = await pool.connect();
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS utenti (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS configurazione (
         id SERIAL PRIMARY KEY,
         chiave VARCHAR(100) UNIQUE NOT NULL,

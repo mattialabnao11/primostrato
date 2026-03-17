@@ -11,10 +11,10 @@
   --text:      #e8eaf0;
   --text2:     #9299ab;
   --text3:     #5c6375;
-  --accent:    #ff6b2b;
-  --accent2:   #ff8c55;
-  --accent3:   #ff3d00;
-  --green:     #2ddb7f;
+  --accent:    #10d98a;
+  --accent2:   #34e8a0;
+  --accent3:   #07b570;
+  --green:     #4ade80;
   --red:       #ff4757;
   --yellow:    #ffd32a;
   --blue:      #3d9eff;
@@ -57,16 +57,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   margin-bottom: 16px;
 }
 
-.brand-icon {
-  font-size: 28px;
-  color: var(--accent);
-  line-height: 1;
-  animation: pulse 3s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+.brand-logo {
+  width: 80px;
+  height: auto;
+  filter: invert(1) brightness(10);
+  opacity: 0.9;
 }
 
 .brand-text {
@@ -400,9 +395,9 @@ select option { background: var(--bg3); }
   font-family: var(--mono);
 }
 
-.badge-green { background: rgba(45,219,127,0.12); color: var(--green); border: 1px solid rgba(45,219,127,0.2); }
+.badge-green { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
 .badge-red   { background: rgba(255,71,87,0.12);  color: var(--red);   border: 1px solid rgba(255,71,87,0.2); }
-.badge-orange{ background: rgba(255,107,43,0.12); color: var(--accent);border: 1px solid rgba(255,107,43,0.2); }
+.badge-orange{ background: rgba(16,217,138,0.12); color: var(--accent);border: 1px solid rgba(16,217,138,0.2); }
 .badge-blue  { background: rgba(61,158,255,0.12); color: var(--blue);  border: 1px solid rgba(61,158,255,0.2); }
 
 /* ─── MODAL ──────────────────────────────────────────────────────────── */
@@ -866,8 +861,8 @@ select option { background: var(--bg3); }
 .breakdown-row.netto.negative { color: var(--red); }
 
 .price-consigliato {
-  background: rgba(255,107,43,0.07);
-  border: 1px solid rgba(255,107,43,0.2);
+  background: rgba(16,217,138,0.07);
+  border: 1px solid rgba(16,217,138,0.2);
   border-radius: var(--radius);
   padding: 10px 14px;
   font-family: var(--mono);
@@ -906,7 +901,7 @@ select option { background: var(--bg3); }
 .extra-checkbox-item:hover { border-color: var(--border2); }
 .extra-checkbox-item.checked {
   border-color: var(--accent);
-  background: rgba(255,107,43,0.06);
+  background: rgba(16,217,138,0.06);
 }
 
 .extra-checkbox-item input[type="checkbox"] {
